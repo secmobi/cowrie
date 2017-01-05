@@ -80,7 +80,7 @@ class HoneyPotBaseProtocol(insults.TerminalProtocol, TimeoutMixin):
         self.realClientPort = pt.transport.getPeer().port
         self.clientVersion = self.getClientVersion()
         self.logintime = time.time()
-        self.setTimeout(1800)
+        self.setTimeout(180)
 
         # Source IP of client in user visible reports (can be fake or real)
         try:
@@ -120,6 +120,9 @@ class HoneyPotBaseProtocol(insults.TerminalProtocol, TimeoutMixin):
 
     def connectionLost(self, reason):
         """
+        Called when the connection is shut down.
+        Clear any circular references here, and any external references to
+        this Protocol. The connection has been closed.
         """
         self.setTimeout(None)
         insults.TerminalProtocol.connectionLost(self, reason)
@@ -127,8 +130,10 @@ class HoneyPotBaseProtocol(insults.TerminalProtocol, TimeoutMixin):
         del self.cmdstack
         del self.commands
         self.fs = None
+        self.pp = None
         self.cfg = None
         self.user = None
+        self.environ = None
         log.msg("honeypot terminal protocol connection lost {}".format(reason))
 
 
@@ -246,9 +251,6 @@ class HoneyPotInteractiveProtocol(HoneyPotBaseProtocol, recvline.HistoricRecvLin
 
         self.cmdstack = [honeypot.HoneyPotShell(self)]
 
-        pt = self.getProtoTransport()
-        pt.factory.sessions[pt.transport.sessionno] = self
-
         self.keyHandlers.update({
             '\x01':     self.handle_HOME,	# CTRL-A
             '\x02':     self.handle_LEFT,	# CTRL-B
@@ -303,10 +305,6 @@ class HoneyPotInteractiveProtocol(HoneyPotBaseProtocol, recvline.HistoricRecvLin
     def connectionLost(self, reason):
         """
         """
-        pt = self.getProtoTransport()
-        if pt.transport.sessionno in pt.factory.sessions:
-            del pt.factory.sessions[pt.transport.sessionno]
-
         self.lastlogExit()
         HoneyPotBaseProtocol.connectionLost(self, reason)
         recvline.HistoricRecvLine.connectionLost(self, reason)
